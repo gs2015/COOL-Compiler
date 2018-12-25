@@ -71,6 +71,7 @@ import java.util.*;
 
     switch(yy_lexical_state) {
 		case COMMENT:
+		case SINGLE_COMMENT:
 			s.value = "EOF in comment";
 			break;
 		case STRING:
@@ -84,7 +85,7 @@ import java.util.*;
 %class CoolLexer
 %cup
 %line
-%state COMMENT,ID,STRING,STRING_ESCAPE,INT
+%state COMMENT,SINGLE_COMMENT,ID,STRING,STRING_ESCAPE,INT
 %notunix
 
 DIGIT=[0-9]
@@ -92,7 +93,7 @@ NUMBER=({DIGIT}+)
 NEWLINE=\n|\r\n
 WHITESPACE=[ \t]
 SEP=(({WHITESPACE}|{NEWLINE})*|\(|\))
-KEYWORDS={SEP}(class|else|false|fi|if|in|inherits|isvoid|let|loop|pool|then|while|case|esac|new|of|not|true){SEP}
+KEYWORDS=([cC][lL][aA][sS][sS]|[eE][lL][sS][eE]|f[aA][lL][sS][eE]|[fF][iI]|[iI][fF]|[iI][nN]|[iI][nN][hH][eE][rR][iI][tT][sS]|[iI][sS][vV][oO][iI][dD]|[lL][eE][tT]|[lL][oO][oO][pP]|[pP][oO][oO][lL]|[tT][hH][eE][nN]|[wW][hH][iI][lL][eE]|[cC][aA][sS][eE]|[eE][sS][aA][cC]|[nN][eE][wW]|[oO][fF]|[nN][oO][tT]|t[rR][uU][eE]) 
 ANY=.|{NEWLINE}
 LETTERS=[a-zA-Z]
 ID={LETTERS}({LETTERS}|{DIGIT}|_)*
@@ -109,7 +110,23 @@ BACK_SLASH=\\
 	yybegin(YYINITIAL);
 }
 
+
+<COMMENT> {NEWLINE} {
+	curr_lineno = yyline + 1;
+}
+
 <COMMENT> {ANY} {
+}
+
+<YYINITIAL> "--" {
+	yybegin(SINGLE_COMMENT);
+}
+
+<SINGLE_COMMENT> {NEWLINE} {
+	curr_lineno = yyline + 1;
+	yybegin(YYINITIAL);
+}
+<SINGLE_COMMENT> . {
 }
 
 <YYINITIAL> "\"" {
@@ -118,6 +135,16 @@ BACK_SLASH=\\
 
 <STRING> "\"" {
 	String text = string_buf.toString();
+	//TODO ...
+	if(text.length()==1025){
+		Symbol s = new Symbol(TokenConstants.ERROR); 
+		s.value = "String constant too long";
+		return s;
+	}else if(text.length()>1025){
+		Symbol s = new Symbol(TokenConstants.ERROR); 
+		s.value = "String constant too long";
+		return s;
+	}
 	string_buf.setLength(0);
 	yybegin(YYINITIAL);
 	int index = 0;		
@@ -152,9 +179,15 @@ BACK_SLASH=\\
 	string_buf.append("\f");
 	yybegin(STRING);
 }
+<STRING_ESCAPE> "\"" {
+	string_buf.append("\"");
+	yybegin(STRING);
+}
+
 
 <STRING_ESCAPE> {NEWLINE} {
-	curr_lineno = yyline;
+	curr_lineno = yyline + 1;
+    string_buf.append("\n");
 	yybegin(STRING);
 }
 
@@ -164,7 +197,7 @@ BACK_SLASH=\\
 }
 
 <STRING> {NEWLINE} {
-	curr_lineno = yyline;
+	curr_lineno = yyline + 1;
     string_buf.setLength(0);
 	yybegin(YYINITIAL);
 	Symbol s = 	new Symbol(TokenConstants.ERROR); 	
@@ -173,13 +206,7 @@ BACK_SLASH=\\
 }
 
 <STRING> . {
-	if(string_buf.length()<1025){
-		string_buf.append(yytext());
-	}else{
-		Symbol s = new Symbol(TokenConstants.ERROR); 
-		s.value = yytext();
-		return s;
-	}
+	string_buf.append(yytext());
 }
 
 <YYINITIAL> {NUMBER} {
@@ -200,20 +227,18 @@ BACK_SLASH=\\
 
 <YYINITIAL> {SEP} {}
 <YYINITIAL> {NEWLINE} {
-	curr_lineno = yyline;
+	curr_lineno = yyline + 1;
 }
 
 <YYINITIAL> {KEYWORDS} {
 	String keyword = yytext();
-	curr_lineno = yyline;
-	if(keyword.startsWith("\n")){
-		curr_lineno++;	
-	}
-	keyword=keyword.trim();
+	curr_lineno = yyline + 1;
+	keyword=keyword.trim().toLowerCase();
 	switch(keyword){
 		case "class": return new Symbol(TokenConstants.CLASS);
 		case "else": return new Symbol(TokenConstants.ELSE);
 		case "if": return new Symbol(TokenConstants.IF);
+		case "fi": return new Symbol(TokenConstants.FI);
 		case "in": return new Symbol(TokenConstants.IN);
 		case "inherits": return new Symbol(TokenConstants.INHERITS);
 		case "isvoid": return new Symbol(TokenConstants.ISVOID);
@@ -227,12 +252,21 @@ BACK_SLASH=\\
 		case "new": return new Symbol(TokenConstants.NEW);
 		case "of": return new Symbol(TokenConstants.OF);
 		case "not": return new Symbol(TokenConstants.NOT);
+		case "true":
+			 Symbol t = new Symbol(TokenConstants.BOOL_CONST);
+			 t.value = true;
+			 return  t;
+		case "false":
+			 Symbol f = new Symbol(TokenConstants.BOOL_CONST);
+			 f.value = false;
+			 return f;
+
 	}
 }	
 
 
 <YYINITIAL> {ID} {
-	curr_lineno = yyline+1;
+	curr_lineno = yyline + 1;
 	String text = yytext();
 	char c = text.charAt(0);
 
@@ -327,4 +361,3 @@ BACK_SLASH=\\
 						 return s;
 
 }
-
