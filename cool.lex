@@ -39,7 +39,7 @@ import java.util.*;
     private Map<String,Integer> stringMap = new HashMap<>();
     private Map<String,Integer> numberMap = new HashMap<>();
 
-	private boolean unterminatedString = false;
+	private int commentLv = 0 ; //for nested multi-line comment
 
 %}
 
@@ -96,13 +96,17 @@ BACK_SLASH=\\
 
 <YYINITIAL> "(*" {
 	yybegin(COMMENT);
+	commentLv++;
 }
-
+<COMMENT> "(*" {
+	commentLv++;
+}
 <COMMENT> "*)" {
-	yybegin(YYINITIAL);
+	commentLv--;
+	if(commentLv == 0){
+		yybegin(YYINITIAL);
+	}
 }
-
-
 <COMMENT> {NEWLINE} {
 	curr_lineno = yyline + 1;
 }
@@ -145,7 +149,6 @@ BACK_SLASH=\\
 		index = stringMap.size();
 		stringMap.put(text,index);
 	}
-	//System.out.println("length:"+text.length());
 	Symbol s = new Symbol(TokenConstants.STR_CONST);
 	s.value = new StringSymbol(text,text.length(),index);
 	return s;
@@ -185,7 +188,6 @@ BACK_SLASH=\\
 
 <STRING_ESCAPE> . {
 	string_buf.append(yytext());
-    System.out.println("escaped:"+yytext());
 }
 
 <STRING> {NEWLINE} {
@@ -227,9 +229,6 @@ BACK_SLASH=\\
 <YYINITIAL> {KEYWORDS} {
 	String keyword = yytext();
 	curr_lineno = yyline + 1;
-/*	if(keyword.startsWith("\n")){
-		curr_lineno++;	
-	}*/
 	keyword=keyword.trim().toLowerCase();
 	switch(keyword){
 		case "class": return new Symbol(TokenConstants.CLASS);
@@ -312,6 +311,12 @@ BACK_SLASH=\\
 <YYINITIAL>"<-" {
    return new Symbol(TokenConstants.ASSIGN); 	
 }
+<YYINITIAL>"<=" {
+   return new Symbol(TokenConstants.LT);
+}
+<YYINITIAL>"=>"	{ 
+  return new Symbol(TokenConstants.DARROW); 
+}
 <YYINITIAL>"," {
    return new Symbol(TokenConstants.COMMA); 	
 }
@@ -342,17 +347,7 @@ BACK_SLASH=\\
 <YYINITIAL>"<" {
    return new Symbol(TokenConstants.LT);
 }
-
-<YYINITIAL>"=>"			{ /* Sample lexical rule for "=>" arrow.
-                                     Further lexical rules should be defined
-                                     here, after the last %% separator */
-                                  return new Symbol(TokenConstants.DARROW); 
-}
-
-.                               { /* This rule should be the very last
-                                     in your lexical specification and
-                                     will match match everything not
-                                     matched by other lexical rules. */
+. { 
 						Symbol s = 	new Symbol(TokenConstants.ERROR); 
 						s.value = yytext();
 						 return s;
