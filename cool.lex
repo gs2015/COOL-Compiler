@@ -22,25 +22,25 @@ import java.util.*;
 
     private int curr_lineno = 1;
     int get_curr_lineno() {
-	return curr_lineno;
+		return curr_lineno;
     }
 
     private AbstractSymbol filename;
 
     void set_filename(String fname) {
-	filename = AbstractTable.stringtable.addString(fname);
+		filename = AbstractTable.stringtable.addString(fname);
     }
 
     AbstractSymbol curr_filename() {
-	return filename;
+		return filename;
     }
 
     boolean isLastWhite = false;
     boolean start = false;
     private int idTableIndex =0;
-//    private List<String> idList = new ArrayList<>();
 
     private Map<String,Integer> idMap = new HashMap<>();
+    private Map<String,Integer> stringMap = new HashMap<>();
 
 %}
 
@@ -63,14 +63,18 @@ import java.util.*;
  *  work.  */
 
     switch(yy_lexical_state) {
-    case YYINITIAL:
-	/* nothing special to do in the initial state */
-	break;
-	/* If necessary, add code for other states here, e.g:
-	   case COMMENT:
-	   ...
-	   break;
-	*/
+		case YYINITIAL:
+			/* nothing special to do in the initial state */
+			break;
+		case COMMENT:
+			System.out.println("******** ERROR:EOF in comment *******");
+			break;
+		case STRING:
+		case STRING_ESCAPE:
+			System.out.println("******** ERROR:EOF in string *******");
+			break;
+
+
     }
     return new Symbol(TokenConstants.EOF);
 %eofval}
@@ -96,66 +100,67 @@ BACK_SLASH=\\
 %%
 
 <YYINITIAL> "(*" {
-	//System.out.println("comment begin.");
 	yybegin(COMMENT);
 }
 
 <COMMENT> "*)" {
-//	System.out.println("comment finish.");
 	yybegin(YYINITIAL);
 }
 
-
-
 <COMMENT> {ANY} {
-//	System.out.println("comment:"+yytext());
 }
 
 <YYINITIAL> "\"" {
-//	System.out.println("String start.");
 	yybegin(STRING);
 }
 
 <STRING> "\"" {
-//	System.out.println("String end.");
+	String text = string_buf.toString();
+	string_buf.setLength(0);
 	yybegin(YYINITIAL);
+	int index = 0;		
+    if(stringMap.containsKey(text)){
+		index = stringMap.get(text);
+	}else{
+		index = stringMap.size();
+		stringMap.put(text,index);
+	}
+	Symbol s = new Symbol(TokenConstants.STR_CONST);
+	s.value = new StringSymbol(text,text.length(),index);
+	return s;
 }
 
 <STRING> {BACK_SLASH_AND_NEW_LINE}  {
-	System.out.println("wrapped String........");
+//	System.out.println("wrapped String........");
 }
 
 <STRING> {BACK_SLASH} {
 	yybegin(STRING_ESCAPE);
 }
 
-<STRING_ESCAPE> "n\"" {
-        System.out.println("********  String \\n   *******");
-        yybegin(YYINITIAL);
+<STRING_ESCAPE> "n" {
+	string_buf.append("\n");
+	yybegin(STRING);
 }
-<STRING_ESCAPE> "b\"" {
-        System.out.println("********  String \\b   *******");
-        yybegin(YYINITIAL);
+<STRING_ESCAPE> "b" {
+	string_buf.append("\b");
+	yybegin(STRING);
 }
-<STRING_ESCAPE> "t\"" {
-        System.out.println("********  String \\t   *******");
-        yybegin(YYINITIAL);
+<STRING_ESCAPE> "t" {
+	string_buf.append("\t");
+	yybegin(STRING);
 }
-<STRING_ESCAPE> "f\"" {
-        System.out.println("********  String \\f   *******");
-        yybegin(YYINITIAL);
+<STRING_ESCAPE> "f" {
+	string_buf.append("\f");
+	yybegin(STRING);
 }
-
-
-
-
 
 <STRING> {NEWLINE} {
-          System.out.println("******** ERROR:new line in string *******");
+    System.out.println("******** ERROR:new line in string *******");
 }
 
 <STRING> . {
-	System.out.println("char:"+yytext());
+	string_buf.append(yytext());
 }
 
 <YYINITIAL> {SEP} {}
@@ -169,8 +174,7 @@ BACK_SLASH=\\
 	}
 	keyword=keyword.trim();
 	switch(keyword){
-		case "class":
-		    return new Symbol(TokenConstants.CLASS);
+		case "class": return new Symbol(TokenConstants.CLASS);
 		case "else": return new Symbol(TokenConstants.ELSE);
 		case "if": return new Symbol(TokenConstants.IF);
 		case "in": return new Symbol(TokenConstants.IN);
@@ -197,13 +201,13 @@ BACK_SLASH=\\
 
 	if( (c>=65 && c<=90 )|| (c>=97 && c<=122) ){
 		int index =0;		
-        	if(idMap.containsKey(text)){
+        if(idMap.containsKey(text)){
 			index = idMap.get(text);
 		}else{
 			index = idMap.size();
 			idMap.put(text,index);
 		}
-                IdTable t = new IdTable();
+        IdTable t = new IdTable();
 		Symbol s ;
 		if(c>=65 && c<=90){ //cap
 			s = new Symbol(TokenConstants.TYPEID); 
@@ -214,8 +218,7 @@ BACK_SLASH=\\
 			s.value = t.getNewSymbol(text,text.length(),index);
 			return s; 
 		}
-	}
-	else{
+	}else{
 		System.err.println("err id:"+text); 
 	}
 }
