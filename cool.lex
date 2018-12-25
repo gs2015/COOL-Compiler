@@ -61,14 +61,6 @@ import java.util.*;
  *  Ultimately, you should return the EOF symbol, or your lexer won't
  *  work.  */
 	Symbol s = 	new Symbol(TokenConstants.EOF);
-/*	System.out.println("EOF in state:"+yy_lexical_state);
-	System.out.println("COMMENT:"+COMMENT);
-	System.out.println("ID:"+ID);
-	System.out.println("STRING:"+STRING);
-	System.out.println("STRING_ESCAPE:"+STRING_ESCAPE);
-	System.out.println("INT:"+INT);
-*/
-
     switch(yy_lexical_state) {
 		case COMMENT:
 		case SINGLE_COMMENT:
@@ -92,7 +84,7 @@ DIGIT=[0-9]
 NUMBER=({DIGIT}+)
 NEWLINE=\n|\r\n
 WHITESPACE=[ \t]
-SEP=(({WHITESPACE}|{NEWLINE})*|\(|\))
+SEP=(({WHITESPACE}|{NEWLINE})*)
 KEYWORDS=([cC][lL][aA][sS][sS]|[eE][lL][sS][eE]|f[aA][lL][sS][eE]|[fF][iI]|[iI][fF]|[iI][nN]|[iI][nN][hH][eE][rR][iI][tT][sS]|[iI][sS][vV][oO][iI][dD]|[lL][eE][tT]|[lL][oO][oO][pP]|[pP][oO][oO][lL]|[tT][hH][eE][nN]|[wW][hH][iI][lL][eE]|[cC][aA][sS][eE]|[eE][sS][aA][cC]|[nN][eE][wW]|[oO][fF]|[nN][oO][tT]|t[rR][uU][eE]) 
 ANY=.|{NEWLINE}
 LETTERS=[a-zA-Z]
@@ -135,7 +127,6 @@ BACK_SLASH=\\
 
 <STRING> "\"" {
 	String text = string_buf.toString();
-	//TODO ...
 	if(text.length()==1025){
 		Symbol s = new Symbol(TokenConstants.ERROR); 
 		s.value = "String constant too long";
@@ -154,6 +145,7 @@ BACK_SLASH=\\
 		index = stringMap.size();
 		stringMap.put(text,index);
 	}
+	//System.out.println("length:"+text.length());
 	Symbol s = new Symbol(TokenConstants.STR_CONST);
 	s.value = new StringSymbol(text,text.length(),index);
 	return s;
@@ -224,8 +216,10 @@ BACK_SLASH=\\
 
 }
 
+<YYINITIAL> {WHITESPACE} {
 
-<YYINITIAL> {SEP} {}
+}
+
 <YYINITIAL> {NEWLINE} {
 	curr_lineno = yyline + 1;
 }
@@ -233,6 +227,9 @@ BACK_SLASH=\\
 <YYINITIAL> {KEYWORDS} {
 	String keyword = yytext();
 	curr_lineno = yyline + 1;
+/*	if(keyword.startsWith("\n")){
+		curr_lineno++;	
+	}*/
 	keyword=keyword.trim().toLowerCase();
 	switch(keyword){
 		case "class": return new Symbol(TokenConstants.CLASS);
