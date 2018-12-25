@@ -35,12 +35,11 @@ import java.util.*;
 		return filename;
     }
 
-    boolean isLastWhite = false;
-    boolean start = false;
-    private int idTableIndex =0;
-
     private Map<String,Integer> idMap = new HashMap<>();
     private Map<String,Integer> stringMap = new HashMap<>();
+    private Map<String,Integer> numberMap = new HashMap<>();
+
+	private boolean unterminatedString = false;
 
 %}
 
@@ -61,37 +60,40 @@ import java.util.*;
  *  one of those states, place your code in the switch statement.
  *  Ultimately, you should return the EOF symbol, or your lexer won't
  *  work.  */
+	Symbol s = 	new Symbol(TokenConstants.EOF);
+/*	System.out.println("EOF in state:"+yy_lexical_state);
+	System.out.println("COMMENT:"+COMMENT);
+	System.out.println("ID:"+ID);
+	System.out.println("STRING:"+STRING);
+	System.out.println("STRING_ESCAPE:"+STRING_ESCAPE);
+	System.out.println("INT:"+INT);
+*/
 
     switch(yy_lexical_state) {
-		case YYINITIAL:
-			/* nothing special to do in the initial state */
-			break;
 		case COMMENT:
-			System.out.println("******** ERROR:EOF in comment *******");
+			s.value = "EOF in comment";
 			break;
 		case STRING:
 		case STRING_ESCAPE:
-			System.out.println("******** ERROR:EOF in string *******");
+			s.value = "EOF in string constant";
 			break;
-
-
     }
-    return new Symbol(TokenConstants.EOF);
+    return s;
 %eofval}
 
 %class CoolLexer
 %cup
 %line
-%state COMMENT,ID,STRING,STRING_ESCAPE
+%state COMMENT,ID,STRING,STRING_ESCAPE,INT
 %notunix
 
 DIGIT=[0-9]
-
+NUMBER=({DIGIT}+)
 NEWLINE=\n|\r\n
-KEYWORDS=(class|else|false|fi|if|in|inherits|isvoid|let|loop|pool|then|while|case|esac|new|of|not|true)
-ANY=.|{NEWLINE}
 WHITESPACE=[ \t]
-SEP=({WHITESPACE}|{NEWLINE})+
+SEP=(({WHITESPACE}|{NEWLINE})*|\(|\))
+KEYWORDS={SEP}(class|else|false|fi|if|in|inherits|isvoid|let|loop|pool|then|while|case|esac|new|of|not|true){SEP}
+ANY=.|{NEWLINE}
 LETTERS=[a-zA-Z]
 ID={LETTERS}({LETTERS}|{DIGIT}|_)*
 BACK_SLASH_AND_NEW_LINE=\\{NEWLINE}
@@ -130,10 +132,6 @@ BACK_SLASH=\\
 	return s;
 }
 
-<STRING> {BACK_SLASH_AND_NEW_LINE}  {
-//	System.out.println("wrapped String........");
-}
-
 <STRING> {BACK_SLASH} {
 	yybegin(STRING_ESCAPE);
 }
@@ -155,20 +153,59 @@ BACK_SLASH=\\
 	yybegin(STRING);
 }
 
+<STRING_ESCAPE> {NEWLINE} {
+	curr_lineno = yyline;
+	yybegin(STRING);
+}
+
+<STRING_ESCAPE> . {
+	string_buf.append(yytext());
+    System.out.println("escaped:"+yytext());
+}
+
 <STRING> {NEWLINE} {
-    System.out.println("******** ERROR:new line in string *******");
+	curr_lineno = yyline;
+    string_buf.setLength(0);
+	yybegin(YYINITIAL);
+	Symbol s = 	new Symbol(TokenConstants.ERROR); 	
+	s.value = "Unterminated string constant";
+	return s;
 }
 
 <STRING> . {
-	string_buf.append(yytext());
+	if(string_buf.length()<1025){
+		string_buf.append(yytext());
+	}else{
+		Symbol s = new Symbol(TokenConstants.ERROR); 
+		s.value = yytext();
+		return s;
+	}
 }
 
-<YYINITIAL> {SEP} {}
-<YYINITIAL> {NEWLINE} {}
+<YYINITIAL> {NUMBER} {
+	String text = yytext();
+	int index = 0;
+    if(numberMap.containsKey(text)){
+		index = numberMap.get(text);
+	}else{
+		index = stringMap.size();
+		numberMap.put(text,index);
+	}
+    Symbol s = new Symbol(TokenConstants.INT_CONST);
+	s.value = new IntSymbol(text,text.length(),index);
+	return s;
 
-<YYINITIAL> {SEP}{KEYWORDS}{SEP} {
+}
+
+
+<YYINITIAL> {SEP} {}
+<YYINITIAL> {NEWLINE} {
+	curr_lineno = yyline;
+}
+
+<YYINITIAL> {KEYWORDS} {
 	String keyword = yytext();
-	curr_lineno = yyline+1;
+	curr_lineno = yyline;
 	if(keyword.startsWith("\n")){
 		curr_lineno++;	
 	}
@@ -285,8 +322,9 @@ BACK_SLASH=\\
                                      in your lexical specification and
                                      will match match everything not
                                      matched by other lexical rules. */
+						Symbol s = 	new Symbol(TokenConstants.ERROR); 
+						s.value = yytext();
+						 return s;
 
-                                  System.err.println("******** LEXER BUG - UNMATCHED: " + +(yyline+1)+ ":" + yytext()+"********"); 
-//System.exit(0);
 }
 
