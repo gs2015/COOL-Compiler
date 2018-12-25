@@ -40,7 +40,8 @@ import java.util.*;
     private Map<String,Integer> numberMap = new HashMap<>();
 
 	private int commentLv = 0 ; //for nested multi-line comment
-
+ 
+     private boolean eof = false  ;
 %}
 
 %init{
@@ -50,6 +51,7 @@ import java.util.*;
  *  go here.  Don't remove or modify anything that was there initially. */
 
     // empty for now
+
 %init}
 
 %eofval{
@@ -60,18 +62,26 @@ import java.util.*;
  *  one of those states, place your code in the switch statement.
  *  Ultimately, you should return the EOF symbol, or your lexer won't
  *  work.  */
-	Symbol s = 	new Symbol(TokenConstants.EOF);
-    switch(yy_lexical_state) {
-		case COMMENT:
-		case SINGLE_COMMENT:
-			s.value = "EOF in comment";
-			break;
-		case STRING:
-		case STRING_ESCAPE:
-			s.value = "EOF in string constant";
-			break;
+
+    if(!eof){
+    	Symbol s = 	new Symbol(TokenConstants.ERROR);
+        switch(yy_lexical_state) {
+		    case COMMENT:
+           // case SINGLE_COMMENT:
+                eof = true;
+                s.value = "EOF in comment"; 
+                return s;
+		    case STRING:
+            case STRING_ESCAPE:
+                eof = true;
+                s.value = "EOF in string constant"; 
+                return s;
+         }
+         eof = true;
     }
-    return s;
+
+    return new Symbol(TokenConstants.EOF);
+   
 %eofval}
 
 %class CoolLexer
@@ -95,7 +105,7 @@ BACK_SLASH=\\
 %%
 
 <YYINITIAL> "(*" {
-	yybegin(COMMENT);
+    yybegin(COMMENT);
 	commentLv++;
 }
 <COMMENT> "(*" {
@@ -131,7 +141,9 @@ BACK_SLASH=\\
 
 <STRING> "\"" {
 	String text = string_buf.toString();
-	if(text.length()==1025){
+    string_buf.setLength(0); 
+    yybegin(YYINITIAL);
+     if(text.length()==1025){
 		Symbol s = new Symbol(TokenConstants.ERROR); 
 		s.value = "String constant too long";
 		return s;
@@ -140,8 +152,6 @@ BACK_SLASH=\\
 		s.value = "String constant too long";
 		return s;
 	}
-	string_buf.setLength(0);
-	yybegin(YYINITIAL);
 	int index = 0;		
     if(stringMap.containsKey(text)){
 		index = stringMap.get(text);
@@ -179,6 +189,11 @@ BACK_SLASH=\\
 	yybegin(STRING);
 }
 
+<STRING_ESCAPE> {BACK_SLASH} {
+	string_buf.append("\\");
+	yybegin(STRING);
+}
+
 
 <STRING_ESCAPE> {NEWLINE} {
 	curr_lineno = yyline + 1;
@@ -188,6 +203,7 @@ BACK_SLASH=\\
 
 <STRING_ESCAPE> . {
 	string_buf.append(yytext());
+    yybegin(STRING);
 }
 
 <STRING> {NEWLINE} {
@@ -262,7 +278,7 @@ BACK_SLASH=\\
 
 
 <YYINITIAL> {ID} {
-	curr_lineno = yyline + 1;
+//	curr_lineno = yyline + 1;
 	String text = yytext();
 	char c = text.charAt(0);
 
@@ -290,6 +306,11 @@ BACK_SLASH=\\
 	}
 }
 
+<YYINITIAL>"*)" {
+	Symbol s = new Symbol(TokenConstants.ERROR); 
+	s.value = "Unmatched "+yytext();	
+	return s;
+}
 <YYINITIAL>"{" {
    return new Symbol(TokenConstants.LBRACE); 	
 }
@@ -312,7 +333,7 @@ BACK_SLASH=\\
    return new Symbol(TokenConstants.ASSIGN); 	
 }
 <YYINITIAL>"<=" {
-   return new Symbol(TokenConstants.LT);
+   return new Symbol(TokenConstants.LE);
 }
 <YYINITIAL>"=>"	{ 
   return new Symbol(TokenConstants.DARROW); 
@@ -348,8 +369,8 @@ BACK_SLASH=\\
    return new Symbol(TokenConstants.LT);
 }
 . { 
-						Symbol s = 	new Symbol(TokenConstants.ERROR); 
-						s.value = yytext();
-						 return s;
+	Symbol s = 	new Symbol(TokenConstants.ERROR); 
+	s.value = yytext();
+	return s;
 
 }
