@@ -144,11 +144,7 @@ BACK_SLASH=\\
 	yybegin(YYINITIAL);
 
 	if(!nullInString){
-		if(text.length()==1025){
-			Symbol s = new Symbol(TokenConstants.ERROR); 
-			s.value = "String constant too long";
-			return s;
-		}else if(text.length()>1025){
+		if(text.length()>=1025){
 			Symbol s = new Symbol(TokenConstants.ERROR); 
 			s.value = "String constant too long";
 			return s;
