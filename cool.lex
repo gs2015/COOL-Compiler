@@ -22,6 +22,7 @@ import java.util.*;
 
     private int curr_lineno = 1;
     int get_curr_lineno() {
+		curr_lineno = yyline + 1;
 		return curr_lineno;
     }
 
@@ -40,8 +41,8 @@ import java.util.*;
     private Map<String,Integer> numberMap = new HashMap<>();
 
 	private int commentLv = 0 ; //for nested multi-line comment
- 
-     private boolean eof = false  ;
+    private boolean eof = false  ;
+	private boolean nullInString = false;
 %}
 
 %init{
@@ -67,7 +68,6 @@ import java.util.*;
     	Symbol s = 	new Symbol(TokenConstants.ERROR);
         switch(yy_lexical_state) {
 		    case COMMENT:
-           // case SINGLE_COMMENT:
                 eof = true;
                 s.value = "EOF in comment"; 
                 return s;
@@ -87,13 +87,14 @@ import java.util.*;
 %class CoolLexer
 %cup
 %line
-%state COMMENT,SINGLE_COMMENT,ID,STRING,STRING_ESCAPE,INT
+%state COMMENT,SINGLE_COMMENT,ID,STRING,STRING_ESCAPE
 %notunix
+%unicode
 
 DIGIT=[0-9]
 NUMBER=({DIGIT}+)
-NEWLINE=\n|\r\n
-WHITESPACE=[ \t]
+NEWLINE=\r\n|\n
+WHITESPACE=[ \t\f\v\r]
 SEP=(({WHITESPACE}|{NEWLINE})*)
 KEYWORDS=([cC][lL][aA][sS][sS]|[eE][lL][sS][eE]|f[aA][lL][sS][eE]|[fF][iI]|[iI][fF]|[iI][nN]|[iI][nN][hH][eE][rR][iI][tT][sS]|[iI][sS][vV][oO][iI][dD]|[lL][eE][tT]|[lL][oO][oO][pP]|[pP][oO][oO][lL]|[tT][hH][eE][nN]|[wW][hH][iI][lL][eE]|[cC][aA][sS][eE]|[eE][sS][aA][cC]|[nN][eE][wW]|[oO][fF]|[nN][oO][tT]|t[rR][uU][eE]) 
 ANY=.|{NEWLINE}
@@ -118,7 +119,6 @@ BACK_SLASH=\\
 	}
 }
 <COMMENT> {NEWLINE} {
-	curr_lineno = yyline + 1;
 }
 
 <COMMENT> {ANY} {
@@ -129,7 +129,6 @@ BACK_SLASH=\\
 }
 
 <SINGLE_COMMENT> {NEWLINE} {
-	curr_lineno = yyline + 1;
 	yybegin(YYINITIAL);
 }
 <SINGLE_COMMENT> . {
@@ -141,32 +140,55 @@ BACK_SLASH=\\
 
 <STRING> "\"" {
 	String text = string_buf.toString();
-    string_buf.setLength(0); 
-    yybegin(YYINITIAL);
-     if(text.length()==1025){
-		Symbol s = new Symbol(TokenConstants.ERROR); 
-		s.value = "String constant too long";
-		return s;
-	}else if(text.length()>1025){
-		Symbol s = new Symbol(TokenConstants.ERROR); 
-		s.value = "String constant too long";
+	string_buf.setLength(0); 
+	yybegin(YYINITIAL);
+
+	if(!nullInString){
+		if(text.length()==1025){
+			Symbol s = new Symbol(TokenConstants.ERROR); 
+			s.value = "String constant too long";
+			return s;
+		}else if(text.length()>1025){
+			Symbol s = new Symbol(TokenConstants.ERROR); 
+			s.value = "String constant too long";
+			return s;
+		}
+		int index = 0;		
+		if(stringMap.containsKey(text)){
+			index = stringMap.get(text);
+		}else{
+			index = stringMap.size();
+			stringMap.put(text,index);
+		}
+		Symbol s = new Symbol(TokenConstants.STR_CONST);
+		s.value = new StringSymbol(text,text.length(),index);
 		return s;
 	}
-	int index = 0;		
-    if(stringMap.containsKey(text)){
-		index = stringMap.get(text);
-	}else{
-		index = stringMap.size();
-		stringMap.put(text,index);
-	}
-	Symbol s = new Symbol(TokenConstants.STR_CONST);
-	s.value = new StringSymbol(text,text.length(),index);
-	return s;
 }
 
 <STRING> {BACK_SLASH} {
 	yybegin(STRING_ESCAPE);
 }
+
+<STRING> \0 {
+	yybegin(STRING);
+	string_buf.setLength(0);
+	nullInString = true;
+	Symbol s = new Symbol(TokenConstants.ERROR); 
+	s.value = "String contains escaped null character.";
+	return s;
+}
+
+
+<STRING_ESCAPE> \0 {
+	yybegin(STRING);
+	string_buf.setLength(0);
+	nullInString = true;
+	Symbol s = new Symbol(TokenConstants.ERROR); 
+	s.value = "String contains escaped null character.";
+	return s;
+}
+
 
 <STRING_ESCAPE> "n" {
 	string_buf.append("\n");
@@ -196,7 +218,6 @@ BACK_SLASH=\\
 
 
 <STRING_ESCAPE> {NEWLINE} {
-	curr_lineno = yyline + 1;
     string_buf.append("\n");
 	yybegin(STRING);
 }
@@ -207,13 +228,21 @@ BACK_SLASH=\\
 }
 
 <STRING> {NEWLINE} {
-	curr_lineno = yyline + 1;
     string_buf.setLength(0);
 	yybegin(YYINITIAL);
-	Symbol s = 	new Symbol(TokenConstants.ERROR); 	
-	s.value = "Unterminated string constant";
-	return s;
+	if(!nullInString){
+		Symbol s = 	new Symbol(TokenConstants.ERROR); 	
+		s.value = "Unterminated string constant";
+		return s;
+	}else{
+		nullInString = false;
+	}
 }
+
+<STRING> \015 {
+	string_buf.append(yytext());
+}
+
 
 <STRING> . {
 	string_buf.append(yytext());
@@ -234,17 +263,17 @@ BACK_SLASH=\\
 
 }
 
-<YYINITIAL> {WHITESPACE} {
+{WHITESPACE} {
+}
 
+\013 {
 }
 
 <YYINITIAL> {NEWLINE} {
-	curr_lineno = yyline + 1;
 }
 
 <YYINITIAL> {KEYWORDS} {
 	String keyword = yytext();
-	curr_lineno = yyline + 1;
 	keyword=keyword.trim().toLowerCase();
 	switch(keyword){
 		case "class": return new Symbol(TokenConstants.CLASS);
@@ -278,7 +307,6 @@ BACK_SLASH=\\
 
 
 <YYINITIAL> {ID} {
-//	curr_lineno = yyline + 1;
 	String text = yytext();
 	char c = text.charAt(0);
 
